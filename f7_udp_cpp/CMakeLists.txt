@@ -29,6 +29,7 @@ find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
 
 # ターゲットの定義と依存関係の追加
 add_executable(nr25_mr src/NR25_MR.cpp src/include/UDP.cpp)
@@ -53,7 +54,7 @@ add_executable(nr25_enc src/NR25_ENC.cpp)
 ament_target_dependencies(nr25_enc rclcpp std_msgs sensor_msgs geometry_msgs)
 
 add_executable(nr25_pr src/NR25_Parameter_Tuner.cpp)
-ament_target_dependencies(nr25_pr rclcpp std_msgs sensor_msgs geometry_msgs)
+ament_target_dependencies(nr25_pr rclcpp std_msgs sensor_msgs geometry_msgs nav_msgs)
 target_include_directories(nr25_pr PRIVATE ${nlohmann_json_SOURCE_DIR}/single_include)
 
 add_executable(nr25_vel2js src/NR25_Vel_to_JointState.cpp)

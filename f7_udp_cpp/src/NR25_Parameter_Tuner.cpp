@@ -13,18 +13,28 @@ JSONファイルに最後のパラメータを保存・次回起動時に読み�
 CSVファイルにノード切った際のパラメータを現在時刻付きでログ保存できるようにしました
 */
 
+/*
+シュート精度向上案
+
+・自己位置・シュート結果もログに取る・解析
+　　　　　↓
+・機体の自己位置に応じてシュート可能にする？
+*/
+
 #include <atomic>
 #include <chrono>
 #include <fstream>
 #include <iostream>
 #include <mutex>
 #include <nlohmann/json.hpp> //C++でJSON読み取り
-#include <rclcpp/rclcpp.hpp>
 #include <sstream>
-#include <std_msgs/msg/int32_multi_array.hpp>
 #include <string>
 #include <thread>
 #include <vector>
+
+#include <nav_msgs/msg/odometry.hpp>
+#include <rclcpp/rclcpp.hpp>
+#include <std_msgs/msg/int32_multi_array.hpp>
 
 using json = nlohmann::json;
 //保存用のファイル
@@ -40,6 +50,10 @@ public:
     load_parameters();
     publisher = this->create_publisher<std_msgs::msg::Int32MultiArray>(
         "parameter_array", 10);
+
+    subscriber = this->create_subscription<nav_msgs::msg::Odometry>(
+        "/mr_odom", 10,
+        std::bind(&ParameterNode::odom_callback, this, std::placeholders::_1));
 
     running = true;
     publish_thread = std::thread(&ParameterNode::publish_parameters, this);
@@ -63,9 +77,14 @@ private:
   std::atomic<int> shoot_state;
   std::atomic<int> dribble_state;
   std::atomic<bool> running;
+  rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr subscriber;
   rclcpp::Publisher<std_msgs::msg::Int32MultiArray>::SharedPtr publisher;
   std::thread publish_thread;
   std::thread input_thread;
+
+  double current_x = 0.0;
+  double current_y = 0.0;
+  double current_orientation = 0.0;
 
   void publish_parameters() {
     while (running) {
@@ -113,7 +132,8 @@ private:
     if (file.is_open()) {
       auto now = std::chrono::system_clock::now();
       auto time_t_now = std::chrono::system_clock::to_time_t(now);
-      file << std::ctime(&time_t_now) << params[0] << "," << params[1] << ","
+      file << std::ctime(&time_t_now) << current_x << "," << current_y << ","
+           << current_orientation << "," << params[0] << "," << params[1] << ","
            << params[2] << "," << params[3] << "," << shoot_state.load() << ","
            << dribble_state.load() << "\n";
       file.close();
@@ -159,6 +179,20 @@ private:
         }
       }
     }
+  }
+
+  void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg) {
+
+    if (!msg) {
+      current_x = 0.0;
+      current_y = 0.0;
+      current_orientation = 0.0;
+    }
+    current_x = msg->pose.pose.position.x;
+    current_y = msg->pose.pose.position.y;
+    current_orientation = msg->pose.pose.orientation.z;
+
+    save_logs();
   }
 
   void show_parameters() {
