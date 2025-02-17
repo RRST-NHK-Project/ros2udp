@@ -28,11 +28,11 @@ int udp_port = 5000;
 std::vector<int> data = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 int wheelspeed = 30;
-int yawspeed = 10;
+int yawspeed = 5;
 
 // サーボの組み付け時のズレを補正（度数法）
 int SERVO1_CAL = -7;
-int SERVO2_CAL = 2;
+int SERVO2_CAL = -20;
 int SERVO3_CAL = -7;
 int SERVO4_CAL = -16;
 
@@ -137,13 +137,14 @@ private:
         if ((-180 <= deg) && (deg <= -135)) {
             deg = -deg - 135;
         } else {
+
             deg = 225 - deg;
         }
 
         // **目標角度を起動時のYAW角に対して相対的に補正**
         double correction = initial_yaw - current_yaw; // 初期角度を基準に補正
 
-        if (fabs(correction) >= 5) {
+        if (fabs(correction) >= 1) {
             CORRECTION1 = -correction;
             CORRECTION2 = -correction;
             CORRECTION3 = correction;
