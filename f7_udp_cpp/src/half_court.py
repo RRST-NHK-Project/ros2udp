@@ -32,7 +32,7 @@ def draw_court(ax = None):
     return ax
 
  
-def heatmap(data, ax=None, color_map='hot'):
+def heatmap(data, ax=None, color_map='afmhot'):
     x_pose = data['X']
     y_pose = data['Y']
 
@@ -56,7 +56,7 @@ def heatmap(data, ax=None, color_map='hot'):
     return ax
 
 
-data = pd.read_csv('mr_parameter.csv')
+data = pd.read_csv('test_log.csv')
 
 fig, ax = plt.subplots(figsize=(8,7.5))
 draw_court(ax)
