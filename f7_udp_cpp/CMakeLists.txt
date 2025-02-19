@@ -10,17 +10,24 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
+# figletがインストールされていない場合、警告を表示
+if(NOT DEFINED ENV{FIGLET_CHECKED})
+  execute_process(
+    COMMAND which figlet
+    RESULT_VARIABLE figlet_installed
+  )
+  if(NOT figlet_installed EQUAL 0)
+    message(WARNING "Please install 'figlet' with the following command. \nsudo apt install figlet")
+  endif()
+  set(ENV{FIGLET_CHECKED} 1)
+endif()
+
 # 自動でインストール
 include(FetchContent)
 FetchContent_Declare(
   nlohmann_json
   GIT_REPOSITORY https://github.com/nlohmann/json.git
   GIT_TAG v3.11.3
-)
-FetchContent_Declare(
-  figlet
-  GIT_REPOSITORY https://github.com/cmatsuoka/figlet.git
-  GIT_TAG 2.2.5
 )
 FetchContent_MakeAvailable(nlohmann_json)
 
@@ -29,7 +36,14 @@ find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+<<<<<<< HEAD
 find_package(nav_msgs REQUIRED)
+=======
+find_package(tf2 REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
+>>>>>>> origin
 
 # ターゲットの定義と依存関係の追加
 add_executable(nr25_mr src/NR25_MR.cpp src/include/UDP.cpp)
@@ -69,6 +83,10 @@ ament_target_dependencies(nr25_pid rclcpp std_msgs sensor_msgs geometry_msgs)
 add_executable(nr25_dr_c610 src/NR25_DR_C610.cpp src/include/UDP.cpp)
 ament_target_dependencies(nr25_dr_c610 rclcpp std_msgs sensor_msgs geometry_msgs)
 
+add_executable(nr25_mr_servo_cal src/NR25_MR_Servo_Calibrator.cpp)
+ament_target_dependencies(nr25_mr_servo_cal rclcpp std_msgs sensor_msgs geometry_msgs)
+target_include_directories(nr25_mr_servo_cal PRIVATE ${nlohmann_json_SOURCE_DIR}/single_include)
+
 # インストール設定
 install(TARGETS
   nr25_mr
@@ -83,7 +101,20 @@ install(TARGETS
   nr25_enc_pid
   nr25_pid
   nr25_dr_c610
+  nr25_mr_servo_cal
   DESTINATION lib/${PROJECT_NAME})
+
+# figletがインストールされていない場合、警告を表示
+execute_process(
+  COMMAND dpkg -s figlet
+  RESULT_VARIABLE figlet_installed
+  OUTPUT_QUIET
+  ERROR_QUIET
+)
+
+if(NOT figlet_installed EQUAL 0)
+  message(WARNING "Please install 'figlet' with the following command. \nsudo apt install figlet")
+endif()
 
 install(DIRECTORY launch/
   DESTINATION share/${PROJECT_NAME}/launch)
