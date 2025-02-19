@@ -36,6 +36,9 @@ def heatmap(data, ax=None, color_map='hot'):
     x_pose = data['X']
     y_pose = data['Y']
 
+
+    x_pose = x_pose - 4000
+
     positions = np.vstack([x_pose,y_pose])
     kde = gaussian_kde(positions)
 
