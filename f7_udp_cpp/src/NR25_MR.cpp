@@ -28,13 +28,6 @@ Dribble State: 0
 // 自作クラス
 #include "include/UDP.hpp"
 
-// 各ローラーの速度を指定(%)
-int roller_speed_dribble_ab = 30;
-int roller_speed_dribble_cd = 30;
-int roller_speed_shoot_ab = 50;
-int roller_speed_shoot_cd = 50;
-int roller_speed_reload = 15;
-
 // IPアドレスとポートの指定
 std::string udp_ip =
     "192.168.8.216"; // 送信先IPアドレス、宛先マイコンで設定したIPv4アドレスを指定
@@ -44,16 +37,37 @@ std::vector<int> data = {0, 0,  0,  0, 0,
                          0, -1, -1, -1}; // 7~9番を電磁弁制御に転用中（-1 or 1）
 
 // 各機構のシーケンスを格納するクラス
+// 必要なヘッダファイルのインクルード
+
+// グローバル変数の定義
+int roller_speed_dribble_ab = 30;
+int roller_speed_dribble_cd = 30;
+int roller_speed_shoot_ab = 50;
+int roller_speed_shoot_cd = 50;
+int roller_speed_reload = 15;
+
+// Actionクラスの定義
 class Action {
 public:
-  // 事故防止のため、射出機構の展開状況を保存
   static bool ready_for_shoot;
-
-  //フェイダウェイシュートの実行用
   static bool fadeaway_shoot;
 
-  // 射出機構展開シーケンス
-  static void ready_for_shoot_action(UDP &udp, bool CROSS) {
+  static void send_reverse_request(rclcpp::Node::SharedPtr node, UDP &udp) {
+    auto client =
+        node->create_client<custom_srv::srv::FadeAway>("fadeaway_server");
+    auto request = std::make_shared<custom_srv::srv::FadeAway::Request>();
+    request->reverse = true;
+
+    if (client->wait_for_service(std::chrono::seconds(1))) {
+      auto result = client->async_send_request(request);
+      RCLCPP_INFO(node->get_logger(), "後退動作をリクエストしました");
+    } else {
+      RCLCPP_ERROR(node->get_logger(),
+                   "後退動作のサービスが見つかりませんでした");
+    }
+  }
+
+  static void ready_for_shoot_action(UDP &udp) {
     std::cout << "<射出シーケンス開始>" << std::endl;
     std::cout << "展開中..." << std::endl;
     data[6] = 1;
@@ -65,49 +79,28 @@ public:
     udp.send(data);
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
-    if (CROSS == 1) {
-      ready_for_shoot = false;
-      fadeaway_shoot = true;
-      if (client != nullptr) {
-        request->request = true;
-        auto result = client->async_send_request(request);
-        std::cout << "Fadeawayシュートリクエスト送信" << std::endl;
-      }
-    }
     data[1] = 0;
     data[2] = 0;
     data[3] = 0;
     data[4] = 0;
     udp.send(data);
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    if (CROSS == 1) {
-      ready_for_shoot = false;
-      fadeaway_shoot = true;
-      if (client != nullptr) {
-        request->request = true;
-        auto result = client->async_send_request(request);
-        std::cout << "Fadeawayシュートリクエスト送信" << std::endl;
-      }
-    }
-    data[1] = -roller_speed_shoot_ab;
-    data[2] = -roller_speed_shoot_ab;
-    data[3] = roller_speed_shoot_cd;
-    data[4] = roller_speed_shoot_cd;
-    udp.send(data);
+
     ready_for_shoot = true;
     std::cout << "完了." << std::endl;
   }
 
-  // 射出シーケンス
   static void shoot_action(UDP &udp) {
     std::cout << "シュート" << std::endl;
     data[7] = 1;
     udp.send(data);
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
     std::cout << "格納準備中..." << std::endl;
     data[7] = -1;
     udp.send(data);
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
     std::cout << "格納中..." << std::endl;
     data[6] = -1;
     data[8] = -1;
@@ -117,59 +110,39 @@ public:
     data[4] = 0;
     udp.send(data);
     ready_for_shoot = false;
+
     std::cout << "完了." << std::endl;
-    std::cout << "<射出シーケンス終了>" << std::endl;
   }
 
-  static void fadeaway_shoot_phase(UDP &udp) {
-    std::cout << "フェイダウェイシュート" << std::endl;
-    data[7] = 1;
-    udp.send(data);
-    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-    std::cout << "格納準備中..." << std::endl;
-    data[7] = -1;
-    udp.send(data);
-    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-    std::cout << "格納中..." << std::endl;
-    data[6] = -1;
-    data[8] = -1;
-    data[1] = 0;
-    data[2] = 0;
-    data[3] = 0;
-    data[4] = 0;
-    udp.send(data);
-    ready_for_shoot = false;
-    std::cout << "完了." << std::endl;
-    std::cout << "<射出シーケンス終了>" << std::endl;
-  }
-
-  // ドリブルシーケンス
   static void dribble_action(UDP &udp) {
     std::cout << "<ドリブルシーケンス開始>" << std::endl;
-    std::cout << "ドリブル準備中" << std::endl;
     data[1] = roller_speed_dribble_ab;
     data[2] = roller_speed_dribble_ab;
     data[3] = -roller_speed_dribble_cd;
     data[4] = -roller_speed_dribble_cd;
     udp.send(data);
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-    std::cout << "ドリブル" << std::endl;
+
+    std::cout << "ドリブル中" << std::endl;
     data[8] = 1;
     udp.send(data);
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
     data[8] = -1;
     data[1] = 0;
     data[2] = 0;
     data[3] = 0;
     data[4] = 0;
     udp.send(data);
+
     std::cout << "完了." << std::endl;
-    std::cout << "<ドリブルシーケンス終了>" << std::endl;
   }
 };
 
 bool Action::ready_for_shoot = false;
+bool Action::fadeaway_shoot = false;
 
+// PS4 コントローラの入力を受け取るクラス
 class PS4_Listener : public rclcpp::Node {
 public:
   PS4_Listener(const std::string &ip, int port)
@@ -178,89 +151,28 @@ public:
         "joy0", 10,
         std::bind(&PS4_Listener::ps4_listener_callback, this,
                   std::placeholders::_1));
-
-    client = this->create_client<custom_srv::srv::FadeAway>("fadeaway_server");
-    request = std::make_shared<custom_srv::srv::FadeAway::Request>();
-
-    // figletでノード名を表示
-    std::string figletout = "figlet MR";
-    int result = std::system(figletout.c_str());
-    if (result != 0) {
-      std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-                << std::endl;
-      std::cerr << "Please install 'figlet' with the following command:"
-                << std::endl;
-      std::cerr << "sudo apt install figlet" << std::endl;
-      std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-                << std::endl;
-    }
-    RCLCPP_INFO(this->get_logger(),
-                "NHK2025 MR initialized with IP: %s, Port: %d", ip.c_str(),
-                port);
   }
 
 private:
-  // コントローラーの入力を取得、使わない入力はコメントアウト推奨
   void ps4_listener_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
-    //  float LS_X = -1 * msg->axes[0];
-    //  float LS_Y = msg->axes[1];
-    //  float RS_X = -1 * msg->axes[3];
-    //  float RS_Y = msg->axes[4];
-
     bool CROSS = msg->buttons[0];
     bool CIRCLE = msg->buttons[1];
     bool TRIANGLE = msg->buttons[2];
-    // bool SQUARE = msg->buttons[3];
-
-    // bool LEFT = msg->axes[6] == 1.0;
-    // bool RIGHT = msg->axes[6] == -1.0;
-    // bool UP = msg->axes[7] == 1.0;
-    // bool DOWN = msg->axes[7] == -1.0;
-
-    // bool L1 = msg->buttons[4];
-    // bool R1 = msg->buttons[5];
-
-    // float L2 = (-1 * msg->axes[2] + 1) / 2;
-    // float R2 = (-1 * msg->axes[5] + 1) / 2;
-
-    // bool SHARE = msg->buttons[8];
-    // bool OPTION = msg->buttons[9];
     bool PS = msg->buttons[10];
 
-    // bool L3 = msg->buttons[11];
-    // bool R3 = msg->buttons[12];
-
     if (PS) {
-      std::fill(data.begin(), data.end(), 0); // 配列をゼロで埋める
-      data[6] = data[7] = data[8] = -1;       // 最後の3つを-1に
-      for (int attempt = 0; attempt < 10; attempt++) { // 10回試行
-        udp_.send(data);                               // データ送信
-        std::cout << "緊急停止！ 試行" << attempt + 1
-                  << std::endl; // 試行回数を表示
-        std::this_thread::sleep_for(
-            std::chrono::milliseconds(100)); // 100msの遅延
-      }
+      std::fill(data.begin(), data.end(), 0);
+      data[6] = data[7] = data[8] = -1;
+      udp_.send(data);
+      std::cout << "緊急停止！" << std::endl;
       rclcpp::shutdown();
     }
-
-    // if (PS) {
-    //     std::fill(data.begin(), data.end(), 0); // 配列をゼロで埋める for
-    //     (int attempt = 0; attempt < 10; attempt++) {                     //
-    //     10回試行
-    //         udp_.send(data); // データ送信 std::cout << "緊急停止！ 試行" <<
-    //         attempt + 1 << std::endl; // 試行回数を表示
-    //         std::this_thread::sleep_for(std::chrono::milliseconds(100)); //
-    //         100msの遅延
-    //     }
-    //     rclcpp::shutdown();
-    // }
 
     if (CIRCLE) {
       Action::ready_for_shoot_action(udp_);
       std::this_thread::sleep_for(std::chrono::milliseconds(3000));
     }
 
-    // 射出機構が展開済みの場合のみシュートを行う
     if (Action::ready_for_shoot) {
       Action::shoot_action(udp_);
     }
@@ -269,21 +181,14 @@ private:
       Action::dribble_action(udp_);
     }
 
-    if (Action::fadeaway_shoot) {
-      Action::fadeaway_shoot_phase(udp_, CROSS);
-    }
-
     udp_.send(data);
   }
 
   rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr subscription_;
-  rclcpp::Client<custom_srv::srv::FadeAway>::SharedPtr
-      client; // サービスクライアント
-  std::shared_ptr<custom_srv::srv::FadeAway::Request>
-      request; // サービスリクエスト
   UDP udp_;
 };
 
+// パラメータリスナー
 class Params_Listener : public rclcpp::Node {
 public:
   Params_Listener() : Node("mr_pr_listener") {
@@ -291,9 +196,6 @@ public:
         "parameter_array", 10,
         std::bind(&Params_Listener::params_listener_callback, this,
                   std::placeholders::_1));
-    RCLCPP_INFO(this->get_logger(),
-
-                "NHK2025 Parameter Listener initialized");
   }
 
 private:
@@ -303,28 +205,25 @@ private:
     roller_speed_dribble_cd = msg->data[1];
     roller_speed_shoot_ab = msg->data[2];
     roller_speed_shoot_cd = msg->data[3];
-    std::cout << roller_speed_dribble_ab;
-    std::cout << roller_speed_dribble_cd;
-    std::cout << roller_speed_shoot_ab;
-    std::cout << roller_speed_shoot_cd << std::endl;
+    std::cout << "新しい速度パラメータ: " << roller_speed_dribble_ab << ", "
+              << roller_speed_dribble_cd << ", " << roller_speed_shoot_ab
+              << ", " << roller_speed_shoot_cd << std::endl;
   }
 
   rclcpp::Subscription<std_msgs::msg::Int32MultiArray>::SharedPtr subscription_;
 };
 
+// メイン関数
 int main(int argc, char *argv[]) {
   rclcpp::init(argc, argv);
-
   rclcpp::executors::SingleThreadedExecutor exec;
   auto ps4_listener = std::make_shared<PS4_Listener>(udp_ip, udp_port);
   auto params_listener = std::make_shared<Params_Listener>();
-  auto fadeaway_server = this->create_service<custom_srv::srv::FadeAway>(
-      "fadeaway_server", fadeaway_callback);
+
   exec.add_node(ps4_listener);
   exec.add_node(params_listener);
-  request->request = true;
-  exec.spin();
 
+  exec.spin();
   rclcpp::shutdown();
   return 0;
 }
