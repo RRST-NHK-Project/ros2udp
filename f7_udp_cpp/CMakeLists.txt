@@ -40,6 +40,12 @@ find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
+find_package(custom_srv REQUIRED)
+
+
+
+include_directories(${custom_srv_INCLUDE_DIRS})
+
 
 # ターゲットの定義と依存関係の追加
 add_executable(nr25_mr src/NR25_MR.cpp src/include/UDP.cpp)
@@ -115,4 +121,5 @@ endif()
 install(DIRECTORY launch/
   DESTINATION share/${PROJECT_NAME}/launch)
 
+  
 ament_package()
