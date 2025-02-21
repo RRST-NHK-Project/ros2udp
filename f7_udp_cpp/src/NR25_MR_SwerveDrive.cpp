@@ -9,6 +9,7 @@ RRST NHK2025
 #include <thread>
 
 // ROS
+#include "custom_srv/srv/fade_away.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/joy.hpp"
 #include "std_msgs/msg/int32.hpp"
@@ -23,6 +24,7 @@ RRST NHK2025
 
 int deg;
 int truedeg;
+bool fadeaway_move = false;
 
 // サーボの組み付け時のズレを補正（度数法）
 int SERVO1_CAL = -7;
@@ -40,6 +42,32 @@ std::vector<int> data = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 int wheelspeed = 30;
 int yawspeed = 10;
 
+class ReverseService : public rclcpp::Node {
+public:
+  ReverseService() : Node("reverse_service") {
+    service_ = this->create_service<custom_srv::srv::FadeAway>(
+        "reverse_service",
+        std::bind(&ReverseService::handle_service, this, std::placeholders::_1,
+                  std::placeholders::_2));
+  }
+
+private:
+  rclcpp::Service<custom_srv::srv::FadeAway>::SharedPtr service_;
+
+  void handle_service(
+      const std::shared_ptr<custom_srv::srv::FadeAway::Request> request,
+      std::shared_ptr<custom_srv::srv::FadeAway::Response> response) {
+
+    if (request->reverse) {
+      fadeaway_move = true;
+      response->success = true;
+    } else {
+      fadeaway_move = false;
+      response->success = false;
+    }
+  }
+};
+
 class PS4_Listener : public rclcpp::Node {
 public:
   PS4_Listener(const std::string &ip, int port)
@@ -48,6 +76,7 @@ public:
         "joy0", 10,
         std::bind(&PS4_Listener::ps4_listener_callback, this,
                   std::placeholders::_1));
+
     // figletでノード名を表示
     std::string figletout = "figlet MR SwerveDrive";
     int result = std::system(figletout.c_str());
@@ -65,7 +94,6 @@ public:
                 port);
   }
 
-private:
   // コントローラーの入力を取得、使わない入力はコメントアウト推奨
   void ps4_listener_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
     float LS_X = -1 * msg->axes[0];
@@ -218,6 +246,16 @@ private:
       data[3] = yawspeed;
       data[4] = -yawspeed;
     }
+    if (fadeaway_move) {
+      data[1] = -wheelspeed * R2;
+      data[2] = -wheelspeed * R2;
+      data[3] = -wheelspeed * R2;
+      data[4] = -wheelspeed * R2;
+      data[5] = deg + SERVO1_CAL;
+      data[6] = deg + SERVO2_CAL;
+      data[7] = deg + SERVO3_CAL;
+      data[8] = deg + SERVO4_CAL;
+    }
 
     // デバッグ用
     std::cout << data[1] << ", " << data[2] << ", " << data[3] << ", "
@@ -288,9 +326,11 @@ int main(int argc, char *argv[]) {
   auto ps4_listener = std::make_shared<PS4_Listener>(udp_ip, udp_port);
   auto servo_deg_publisher = std::make_shared<Servo_Deg_Publisher>();
   auto params_listener = std::make_shared<Params_Listener>();
+  auto service_client = std::make_shared<ReverseService>();
   exec.add_node(ps4_listener);
   exec.add_node(servo_deg_publisher);
   exec.add_node(params_listener);
+  exec.add_node(service_client);
 
   exec.spin();
 

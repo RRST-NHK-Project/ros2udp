@@ -42,20 +42,15 @@ find_package(tf2_geometry_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(custom_srv REQUIRED)
 
-
-
-include_directories(${custom_srv_INCLUDE_DIRS})
-
-
 # ターゲットの定義と依存関係の追加
 add_executable(nr25_mr src/NR25_MR.cpp src/include/UDP.cpp)
-ament_target_dependencies(nr25_mr rclcpp std_msgs sensor_msgs geometry_msgs)
+ament_target_dependencies(nr25_mr rclcpp std_msgs sensor_msgs geometry_msgs custom_srv)
 
 add_executable(nr25_mr_omni src/NR25_MR_Omni.cpp src/include/UDP.cpp)
 ament_target_dependencies(nr25_mr_omni rclcpp std_msgs sensor_msgs geometry_msgs)
 
 add_executable(nr25_mr_sd src/NR25_MR_SwerveDrive.cpp src/include/UDP.cpp)
-ament_target_dependencies(nr25_mr_sd rclcpp std_msgs sensor_msgs geometry_msgs)
+ament_target_dependencies(nr25_mr_sd rclcpp std_msgs sensor_msgs geometry_msgs custom_srv)
 
 add_executable(nr25_dr src/NR25_DR.cpp src/include/UDP.cpp)
 ament_target_dependencies(nr25_dr rclcpp std_msgs sensor_msgs geometry_msgs)
@@ -87,9 +82,6 @@ ament_target_dependencies(nr25_dr_c610 rclcpp std_msgs sensor_msgs geometry_msgs
 
 add_executable(nr25_mr_servo_cal src/NR25_MR_Servo_Calibrator.cpp)
 ament_target_dependencies(nr25_mr_servo_cal rclcpp std_msgs sensor_msgs geometry_msgs)
-
-add_executable(nr25_dr_led src/NR25_DR_LED.cpp src/include/UDP.cpp)
-ament_target_dependencies(nr25_dr_led rclcpp std_msgs sensor_msgs geometry_msgs)
 target_include_directories(nr25_mr_servo_cal PRIVATE ${nlohmann_json_SOURCE_DIR}/single_include)
 
 # インストール設定
@@ -107,7 +99,6 @@ install(TARGETS
   nr25_pid
   nr25_dr_c610
   nr25_mr_servo_cal
-  nr25_dr_led
   DESTINATION lib/${PROJECT_NAME})
 
 # figletがインストールされていない場合、警告を表示
