@@ -101,6 +101,9 @@ ament_target_dependencies(mb_tester rclcpp std_msgs sensor_msgs geometry_msgs)
 add_executable(ld19_fs src/LD19_FrontScan.cpp)
 ament_target_dependencies(ld19_fs rclcpp std_msgs sensor_msgs geometry_msgs)
 
+add_executable(es_pub src/Emergency_Stop.cpp)
+ament_target_dependencies(es_pub rclcpp std_msgs sensor_msgs geometry_msgs)
+
 # インストール設定
 install(TARGETS
   nr25_mr
@@ -121,6 +124,7 @@ install(TARGETS
   nr25_dr_hcsr04
   mb_tester
   ld19_fs
+  es_pub
   DESTINATION lib/${PROJECT_NAME})
 
 # figletがインストールされていない場合、警告を表示

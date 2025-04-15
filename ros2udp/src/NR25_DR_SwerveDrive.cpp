@@ -21,7 +21,7 @@ RRST-NHK-Project 2025
 #include "include/IP.hpp"
 #include "include/UDP.hpp"
 
-#define MC_PRINTF 0 // マイコン側のprintfを無効化・有効化(0 or 1)
+#define MC_PRINTF 1 // マイコン側のprintfを無効化・有効化(0 or 1)
 
 // スティックのデッドゾーン
 #define DEADZONE_L 0.3
@@ -107,10 +107,10 @@ class Automation {
 public:
     // 高速自動走行（自動加速、障害物を検知したら停止）
     static void automatic_cruise(UDP &udp) {
-        const int steps = 100;         // 加減速のステップ数
-        const double maxOutput = 95.0; // 最大出力
+        const int steps = 20;          // 加減速のステップ数
+        const double maxOutput = 30.0; // 最大出力
         // const int cruiseTimeMs = 2000; // 巡航時間（ミリ秒）
-        const int intervalMs = 10; // ステップごとの待機時間
+        const int intervalMs = 50; // ステップごとの待機時間
         bool skip_while = false;
 
         std::cout << "<自動加速開始>" << std::endl;
@@ -260,7 +260,7 @@ private:
 
         // bool SHARE = msg->buttons[8];
         bool OPTION = msg->buttons[9];
-        bool PS = msg->buttons[10];
+        bool PS = msg->buttons[10];      // 緊急停止で使用中！！割り当て禁止
         static bool last_option = false; // 前回の状態を保持する static 変数
         // OPTION のラッチ状態を保持する static 変数（初期状態は OFF とする）
         static bool option_latch = false;
@@ -270,15 +270,20 @@ private:
 
         data[0] = MC_PRINTF; // マイコン側のprintfを無効化・有効化(0 or 1)
 
-        // PSボタンで緊急停止 TODO:復帰機能の実装
         if (PS) {
-            std::fill(data.begin(), data.end(), 0);                          // 配列をゼロで埋める
-            for (int attempt = 0; attempt < 10; attempt++) {                 // 10回試行
-                udp_.send(data);                                             // データ送信
-                std::cout << "緊急停止！ 試行" << attempt + 1 << std::endl;  // 試行回数を表示
-                std::this_thread::sleep_for(std::chrono::milliseconds(100)); // 100msの遅延
+            while (1) {
+                std::fill(data.begin(), data.end(), 0);                         // 配列をゼロで埋める
+                for (int attempt = 0; attempt < 100; attempt++) {               // 10回試行
+                    udp_.send(data);                                            // データ送信
+                    std::cout << "緊急停止！ 試行" << attempt + 1 << std::endl; // 試行回数を表示
+                    std::cout << data[0] << ", " << data[1] << ", " << data[2] << ", " << data[3] << ", ";
+                    std::cout << data[4] << ", " << data[5] << ", " << data[6] << ", " << data[7] << ", ";
+                    std::cout << data[8] << ", " << data[9] << ", " << data[10] << ", " << data[11] << ", ";
+                    std::cout << data[12] << ", " << data[13] << ", " << data[14] << ", " << data[15] << ", ";
+                    std::cout << data[16] << ", " << data[17] << ", " << data[18] << std::endl;
+                    std::this_thread::sleep_for(std::chrono::milliseconds(50)); // 100msの遅延
+                }
             }
-            rclcpp::shutdown();
         }
 
         if (L1) {
@@ -650,6 +655,47 @@ private:
     rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr subscription_;
 };
 
+// 緊急停止信号を受信するクラス
+class SoftES : public rclcpp::Node {
+public:
+    SoftES(const std::string &ip, int port, std::shared_ptr<PS4_Listener> ps4_listener, std::shared_ptr<rclcpp::executors::MultiThreadedExecutor> exec) // ここがコンストラクタ！
+        : Node("DR_SD_Emergency_Stop"), udp_(ip, port), ps4_listener_(ps4_listener), exec_(exec) {
+        subscription_ = this->create_subscription<std_msgs::msg::Int32MultiArray>(
+            "dr_emergency_stop", 10,
+            std::bind(&SoftES::es_listener_callback, this,
+                      std::placeholders::_1));
+        RCLCPP_INFO(this->get_logger(),
+                    "NHK2025 DR_SD ES Listener");
+    }
+
+    int es_and_shutdown = 0;
+
+private:
+    void es_listener_callback(const std_msgs::msg::Int32MultiArray::SharedPtr msg) {
+        es_and_shutdown = msg->data[0];
+        if (es_and_shutdown) {
+            // // 緊急停止処理 TODO:復帰機能の実装
+            std::fill(data.begin(), data.end(), 0);                         // 配列をゼロで埋める
+            for (int attempt = 0; attempt < 100; attempt++) {               // 10回試行
+                udp_.send(data);                                            // データ送信
+                std::cout << "緊急停止！ 試行" << attempt + 1 << std::endl; // 試行回数を表示
+                std::cout << data[0] << ", " << data[1] << ", " << data[2] << ", " << data[3] << ", ";
+                std::cout << data[4] << ", " << data[5] << ", " << data[6] << ", " << data[7] << ", ";
+                std::cout << data[8] << ", " << data[9] << ", " << data[10] << ", " << data[11] << ", ";
+                std::cout << data[12] << ", " << data[13] << ", " << data[14] << ", " << data[15] << ", ";
+                std::cout << data[16] << ", " << data[17] << ", " << data[18] << std::endl;
+                std::this_thread::sleep_for(std::chrono::milliseconds(50)); // 100msの遅延
+            }
+            rclcpp::shutdown();
+        }
+    }
+    // NOTE: ここの初期順を変えると警告出る。Nodeの初期化順と同じ順番にする。
+    rclcpp::Subscription<std_msgs::msg::Int32MultiArray>::SharedPtr subscription_;
+    UDP udp_;
+    std::shared_ptr<PS4_Listener> ps4_listener_;
+    std::shared_ptr<rclcpp::executors::MultiThreadedExecutor> exec_;
+};
+
 int main(int argc, char *argv[]) {
     rclcpp::init(argc, argv);
 
@@ -663,17 +709,22 @@ int main(int argc, char *argv[]) {
         std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
     }
 
-    rclcpp::executors::MultiThreadedExecutor exec; // マルチスレッドに変更（意味あるかは知らん）
+    // マルチスレッドに変更（リアルタイム性が求められるため）
+    // execのオブジェクトではなくスマートポインタを渡すように変更
+    auto exec = std::make_shared<rclcpp::executors::MultiThreadedExecutor>();
+
     auto ps4_listener = std::make_shared<PS4_Listener>(IP_DR_SD, PORT_DR_SD);
     auto servo_deg_publisher = std::make_shared<Servo_Deg_Publisher>();
     auto params_listener = std::make_shared<Params_Listener>();
     auto ld19_listener = std::make_shared<LD19_Listener>();
-    exec.add_node(ps4_listener);
-    exec.add_node(servo_deg_publisher);
-    exec.add_node(params_listener);
-    exec.add_node(ld19_listener);
+    auto soft_es = std::make_shared<SoftES>(IP_DR_SD, PORT_DR_SD, ps4_listener, exec);
+    exec->add_node(ps4_listener);
+    exec->add_node(servo_deg_publisher);
+    exec->add_node(params_listener);
+    exec->add_node(ld19_listener);
+    exec->add_node(soft_es);
 
-    exec.spin();
+    exec->spin();
 
     rclcpp::shutdown();
     return 0;
